@@ -326,6 +326,48 @@ assert.equal(Model.creditsText({ balance: "0x0", enabled: false, unlimited: fals
 
 assert.equal(Model.parseSnapshot("not json"), null)
 assert.deepEqual(Model.parseSnapshot("{}").providers, [])
+assert.equal(Model.parseSnapshot(JSON.stringify({ padding: "x".repeat(1048576) })), null)
+
+{
+  const provider = index => ({
+    id: "provider-" + index,
+    displayName: "Provider " + index,
+    windows: []
+  })
+  const snapshot = { providers: Array.from({ length: 40 }, (_, index) => provider(index)) }
+  assert.equal(Model.providerRows(snapshot, now).length, 32)
+  assert.equal(Model.consoleLines(snapshot, now).filter(line => line.spans.length > 0).length, 32)
+}
+
+{
+  const windows = Array.from({ length: 20 }, (_, index) => ({
+    id: "window-" + index,
+    label: "Window " + index,
+    usedPercent: index
+  }))
+  const snapshot = { providers: [{ displayName: "Test", windows }] }
+  assert.equal(Model.providerRows(snapshot, now)[0].windows.length, 16)
+  assert.equal(Model.consoleLines(snapshot, now).length, 17)
+}
+
+{
+  const message = "x".repeat(1000)
+  const displayName = "d".repeat(1000)
+  const plan = "p".repeat(1000)
+  const label = "l".repeat(1000)
+  const snapshot = { providers: [{
+    displayName,
+    plan,
+    status: { state: "failed", message },
+    windows: [{ label }]
+  }] }
+  const row = Model.providerRows(snapshot, now)[0]
+  assert.equal(row.displayName, "d".repeat(256))
+  assert.equal(row.plan, "p".repeat(256))
+  assert.equal(row.statusMessage, "x".repeat(256))
+  assert.equal(row.windows[0].label, "l".repeat(256))
+  assert.equal(Model.consoleLines(snapshot, now)[2].spans[0].text, "  !  " + "x".repeat(256))
+}
 
 assert.equal(Model.providerBadge({ id: "claude" }), "CL")
 assert.equal(Model.providerBadge({ id: "codex" }), "GPT")

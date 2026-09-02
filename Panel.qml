@@ -28,6 +28,8 @@ Panel {
   property bool installTimedOut: false
   property double nowMs: Date.now()
   property var manifest: Model.parseManifest("")
+  readonly property int maxFetchOutputLength: 1048576
+  readonly property int maxDiagnosticOutputLength: 65536
 
   readonly property string manifestUrl: String(Qt.resolvedUrl("manifest.json"))
 
@@ -116,6 +118,7 @@ Panel {
     refreshing = true
     fetchProc.stdoutBuf = ""
     fetchProc.stderrBuf = ""
+    fetchProc.stdoutTruncated = false
     fetchProc.currentFresh = fresh === true
     fetchProc.command = fetchProc.currentFresh
       ? [root.binary, "--json", "--fresh"]
@@ -177,13 +180,18 @@ Panel {
     property string stdoutBuf: ""
     property string stderrBuf: ""
     property bool currentFresh: false
+    property bool stdoutTruncated: false
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: fetchProc.stdoutBuf = String(text || "")
+      onStreamFinished: {
+        var output = String(text || "")
+        fetchProc.stdoutTruncated = output.length > root.maxFetchOutputLength
+        fetchProc.stdoutBuf = output.slice(0, root.maxFetchOutputLength)
+      }
     }
     stderr: StdioCollector {
       waitForEnd: true
-      onStreamFinished: fetchProc.stderrBuf = String(text || "")
+      onStreamFinished: fetchProc.stderrBuf = String(text || "").slice(-root.maxDiagnosticOutputLength)
     }
     onExited: function(exitCode, exitStatus) {
       watchdog.stop()
@@ -192,7 +200,9 @@ Panel {
       // below surfaces here as a non-zero exit; don't overwrite its message.
       if (root.timedOut)
         return
-      if (exitCode === 0)
+      if (fetchProc.stdoutTruncated)
+        root.lastError = "quotamon output exceeded 1 MiB"
+      else if (exitCode === 0)
         root.applyOutput(fetchProc.stdoutBuf)
       else
         root.lastError = fetchProc.stderrBuf.trim() || ("quotamon exited " + exitCode)
@@ -211,11 +221,11 @@ Panel {
     property string stderrBuf: ""
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: installProc.stdoutBuf = String(text || "")
+      onStreamFinished: installProc.stdoutBuf = String(text || "").slice(-root.maxDiagnosticOutputLength)
     }
     stderr: StdioCollector {
       waitForEnd: true
-      onStreamFinished: installProc.stderrBuf = String(text || "")
+      onStreamFinished: installProc.stderrBuf = String(text || "").slice(-root.maxDiagnosticOutputLength)
     }
     onExited: function(exitCode, exitStatus) {
       installWatchdog.stop()
@@ -333,6 +343,7 @@ Panel {
             visible: root.lastError !== ""
             width: parent.width
             text: root.lastError
+            textFormat: Text.PlainText
             color: root.toneColor("critical")
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
@@ -343,6 +354,7 @@ Panel {
             id: consoleLineMeasure
             visible: false
             text: "M"
+            textFormat: Text.PlainText
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
           }
@@ -375,6 +387,7 @@ Panel {
                     Text {
                       required property var modelData
                       text: modelData.text
+                      textFormat: Text.PlainText
                       color: root.toneColor(modelData.tone)
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.body
@@ -390,6 +403,7 @@ Panel {
             width: parent.width
             topPadding: Style.space(12)
             text: "No quota readings yet.\nRun `quotamon setup` if this is the first time."
+            textFormat: Text.PlainText
             color: root.toneColor("dim")
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
@@ -429,6 +443,7 @@ Panel {
             visible: text !== ""
             width: parent.width
             text: Model.versionWarning(root.manifest, root.snapshot)
+            textFormat: Text.PlainText
             color: root.toneColor("critical")
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
@@ -452,6 +467,7 @@ Panel {
             visible: text !== ""
             width: parent.width
             text: Model.aboutText(root.manifest, root.snapshot)
+            textFormat: Text.PlainText
             color: root.toneColor("dim")
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
