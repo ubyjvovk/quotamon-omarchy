@@ -1,6 +1,18 @@
+var maxSnapshotLength = 1048576
+var maxProviders = 32
+var maxWindows = 16
+var maxExternalStringLength = 256
+
+function bounded(value, max) {
+  var text = value === null || value === undefined ? "" : String(value)
+  return Array.from(text).slice(0, max).join("")
+}
+
 function parseSnapshot(raw) {
   try {
-    var data = JSON.parse(String(raw || ""))
+    var text = String(raw || "")
+    if (text.length > maxSnapshotLength) return null
+    var data = JSON.parse(text)
     if (!data || typeof data !== "object") return null
     if (!Array.isArray(data.providers)) data.providers = []
     return data
@@ -113,7 +125,9 @@ function kindRank(kind) {
 }
 
 function sortedWindows(provider, nowMs) {
-  var windows = provider && Array.isArray(provider.windows) ? provider.windows.slice() : []
+  var windows = provider && Array.isArray(provider.windows)
+    ? provider.windows.slice(0, maxWindows)
+    : []
   windows.sort(function(left, right) {
     var leftPercent = currentUsedPercent(left, nowMs)
     var rightPercent = currentUsedPercent(right, nowMs)
@@ -324,7 +338,8 @@ function consoleWindowLine(window, nowMs) {
   var tone = tableTone(used)
   var spans = []
 
-  appendConsoleSpan(spans, "  " + truncateAndPadTableCell(window.label, 9) + " ", "plain")
+  var label = bounded(truncateAndPadTableCell(window.label, 9), maxExternalStringLength)
+  appendConsoleSpan(spans, "  " + label + " ", "plain")
   appendConsoleSpan(spans, "█".repeat(filled), tone)
   appendConsoleSpan(spans, "░".repeat(20 - filled), "dim")
   appendConsoleSpan(spans, " " + " ".repeat(percentPadding), "plain")
@@ -349,8 +364,9 @@ function creditLines(credits) {
 
 function consoleProviderLines(provider, nowMs) {
   provider = provider || {}
-  var plan = hasValue(provider, "plan") ? String(provider.plan) : "—"
-  var header = padTableCell(provider.displayName || "", 12) + " " +
+  var plan = hasValue(provider, "plan") ? bounded(provider.plan, maxExternalStringLength) : "—"
+  var displayName = bounded(provider.displayName || "", maxExternalStringLength)
+  var header = padTableCell(displayName, 12) + " " +
     padTableCell(plan, 14) + " " + originLabel(provider.origin) + " · " +
     formatAge(provider.observedAt, nowMs)
   var lines = [{ spans: [{ text: header, tone: "plain" }] }]
@@ -365,7 +381,8 @@ function consoleProviderLines(provider, nowMs) {
   }
   var status = provider.status || {}
   if (String(status.state || "ok") !== "ok") {
-    lines.push({ spans: [{ text: "  !  " + String(status.message || ""), tone: "critical" }] })
+    var message = bounded(status.message || "", maxExternalStringLength)
+    lines.push({ spans: [{ text: "  !  " + message, tone: "critical" }] })
   }
   return lines
 }
@@ -374,7 +391,9 @@ function consoleProviderLines(provider, nowMs) {
 // Returns [{ spans: [{ text, tone }] }]; a separator line has spans: [].
 // tone ∈ "plain" | "dim" | "warning" | "critical"
 function consoleLines(snapshot, nowMs) {
-  var providers = snapshot && Array.isArray(snapshot.providers) ? snapshot.providers : []
+  var providers = snapshot && Array.isArray(snapshot.providers)
+    ? snapshot.providers.slice(0, maxProviders)
+    : []
   var lines = []
   for (var i = 0; i < providers.length; i++) {
     if (lines.length > 0) lines.push({ spans: [] })
@@ -391,7 +410,9 @@ function consoleText(snapshot, nowMs) {
 }
 
 function providerRows(snapshot, nowMs) {
-  var providers = snapshot && snapshot.providers ? snapshot.providers : []
+  var providers = snapshot && Array.isArray(snapshot.providers)
+    ? snapshot.providers.slice(0, maxProviders)
+    : []
   var rows = []
   for (var i = 0; i < providers.length; i++) {
     var provider = providers[i] || {}
@@ -403,7 +424,7 @@ function providerRows(snapshot, nowMs) {
       var windowSeverity = severity(percent)
       windows.push({
         id: String(window.id || j),
-        label: String(window.label || "Usage"),
+        label: bounded(window.label || "Usage", maxExternalStringLength),
         kind: String(window.kind || ""),
         percent: percent,
         percentText: formatPercent(percent),
@@ -415,12 +436,12 @@ function providerRows(snapshot, nowMs) {
     var status = provider.status || {}
     rows.push({
       id: String(provider.id || i),
-      displayName: String(provider.displayName || provider.id || "Provider"),
-      plan: String(provider.plan || ""),
+      displayName: bounded(provider.displayName || provider.id || "Provider", maxExternalStringLength),
+      plan: bounded(provider.plan || "", maxExternalStringLength),
       origin: originLabel(provider.origin),
       ageText: formatAge(provider.observedAt, nowMs),
       statusState: String(status.state || "ok"),
-      statusMessage: String(status.message || ""),
+      statusMessage: bounded(status.message || "", maxExternalStringLength),
       windows: windows,
       creditsText: creditsText(provider.credits)
     })

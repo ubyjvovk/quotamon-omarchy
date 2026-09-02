@@ -66,11 +66,14 @@ To run the same installer manually:
 bash ~/.config/omarchy/plugins/ubyjvovk.quotamon/fetch-quotamon.sh
 ```
 
-Passing a version (`... fetch-quotamon.sh 2026.9.2`) pins the download to that
-release and verifies it against the digest shipped in this plugin. The release
-origin is a constant in the script; no environment variable can redirect it.
+With no argument, the script installs the exact core version the plugin was
+released with and verifies it against the digest shipped in the plugin. Passing
+a version (`... fetch-quotamon.sh 2026.9.2`) is only an override for a matching
+sidecar; a version without that sidecar is refused, and there is no unpinned
+mode. The release origin is a constant in the script; no environment variable
+can redirect it.
 
-As a by-hand fallback, download `quotamon-linux-amd64` or
+For a fully manual install, download `quotamon-linux-amd64` or
 `quotamon-linux-arm64` and `SHA256SUMS` from the main repository's release,
 verify the checksum, make the binary executable, and run `quotamon setup`.
 `quotamon` must be on `PATH`; if it is not, set the widget's `exec` setting to
